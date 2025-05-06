@@ -8,7 +8,7 @@ import tempfile
 import zipfile
 from datetime import datetime
 
-st.title("📄 PDF Tagger + Inspection Notes Extractor")
+st.title("📄 PDF Tagger + Inspection Notes Extractor 2")
 
 # --- Upload CSV ---
 csv_file = st.file_uploader("Upload CSV with 'tag' and 'link' columns", type=["csv"])
