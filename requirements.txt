@@ -4,4 +4,3 @@ pymupdf
 comtypes
 frontend
 python-docx
-zipfile
