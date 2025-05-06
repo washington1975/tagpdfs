@@ -1,6 +1,6 @@
-fitz
 pandas
+fitz
 pymupdf
 comtypes
 frontend
-python-docx
+# python-docx Using in converting DOC to PDF.

@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import re
 import fitz  # PyMuPDF
+import pymupdf
 import pandas as pd
 from pathlib import Path
 import tempfile
