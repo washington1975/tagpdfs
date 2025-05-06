@@ -56,11 +56,13 @@ def extract_inspection_notes(pdf_path, tags, file_date):
         for page_num, page in enumerate(doc, start=1):
             blocks = page.get_text("blocks")
             for block in blocks:
-                st.warning(block)
                 content = block[4]
+                st.warning(content)  # Show block content for debugging
+
                 for line in content.splitlines():
                     for tag in tags:
-                        if line.strip().startswith(tag):
+                        if re.match(rf'^\s*{re.escape(tag)}\b', line, re.IGNORECASE):
+                            st.info(f"✅ Match found for tag: `{tag}` in line: `{line}`")
                             parts = re.split(r'\s{2,}|\t', line)
                             if len(parts) >= 3:
                                 notes.append({
@@ -86,6 +88,7 @@ def extract_inspection_notes(pdf_path, tags, file_date):
         st.error(f"❌ Error while extracting notes from `{Path(pdf_path).name}`: {e}")
 
     return notes
+
 
 
 def extract_date_from_filename(filename):
