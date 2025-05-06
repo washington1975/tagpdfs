@@ -46,25 +46,46 @@ def tag_pdf_with_links(pdf_path, tag_link_df):
     return tagged_pdf_path
 
 def extract_inspection_notes(pdf_path, tags, file_date):
-    doc = fitz.open(pdf_path)
+    st.markdown(f"🔍 **Extracting inspection notes from:** `{Path(pdf_path).name}`")
     notes = []
-    for page in doc:
-        blocks = page.get_text("blocks")
-        for block in blocks:
-            content = block[4]
-            for line in content.splitlines():
-                for tag in tags:
-                    if line.strip().startswith(tag):
-                        parts = re.split(r'\s{2,}|\t', line)
-                        if len(parts) >= 3:
-                            notes.append({
-                                "Feature": parts[0].strip(),
-                                "Last Inspection": parts[1].strip(),
-                                "This Inspection": parts[2].strip(),
-                                "Date": file_date
-                            })
-    doc.close()
+
+    try:
+        doc = fitz.open(pdf_path)
+        tag_hits = {tag: 0 for tag in tags}
+
+        for page_num, page in enumerate(doc, start=1):
+            blocks = page.get_text("blocks")
+            for block in blocks:
+                content = block[4]
+                for line in content.splitlines():
+                    for tag in tags:
+                        if line.strip().startswith(tag):
+                            parts = re.split(r'\s{2,}|\t', line)
+                            if len(parts) >= 3:
+                                notes.append({
+                                    "Feature": parts[0].strip(),
+                                    "Last Inspection": parts[1].strip(),
+                                    "This Inspection": parts[2].strip(),
+                                    "Date": file_date
+                                })
+                                tag_hits[tag] += 1
+
+        doc.close()
+
+        total_found = sum(tag_hits.values())
+        if total_found == 0:
+            st.warning(f"⚠️ No inspection notes found in `{Path(pdf_path).name}`.")
+        else:
+            st.success(f"✅ Found {total_found} inspection entries.")
+            for tag, count in tag_hits.items():
+                if count > 0:
+                    st.write(f"- **{tag}**: {count} match{'es' if count > 1 else ''}")
+
+    except Exception as e:
+        st.error(f"❌ Error while extracting notes from `{Path(pdf_path).name}`: {e}")
+
     return notes
+
 
 def extract_date_from_filename(filename):
     match = re.search(r'\d{8}', filename)
