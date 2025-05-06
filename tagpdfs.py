@@ -56,6 +56,7 @@ def extract_inspection_notes(pdf_path, tags, file_date):
         for page_num, page in enumerate(doc, start=1):
             blocks = page.get_text("blocks")
             for block in blocks:
+                st.warning(block)
                 content = block[4]
                 for line in content.splitlines():
                     for tag in tags:
