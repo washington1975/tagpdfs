@@ -6,6 +6,7 @@ import pandas as pd
 from pathlib import Path
 import subprocess
 import platform
+import tempfile
 
 st.title("Tag and Link PDFs from Word Docs")
 
@@ -22,19 +23,8 @@ if csv_file:
     except Exception as e:
         st.error(f"Failed to read CSV: {e}")
 
-# Folder selection using a button
-selected_folder = None
-if st.button("Choose Folder Containing DOC/DOCX Files"):
-    from tkinter import Tk, filedialog
-    root = Tk()
-    root.withdraw()
-    folder_path = filedialog.askdirectory()
-    root.destroy()
-    if folder_path:
-        selected_folder = folder_path
-
-if selected_folder:
-    st.success(f"Selected folder: {selected_folder}")
+# Upload Word DOC/DOCX files
+uploaded_docs = st.file_uploader("Upload DOC/DOCX files", type=["doc", "docx"], accept_multiple_files=True)
 
 # Function to convert DOC/DOCX to PDF using appropriate method per OS
 def convert_doc_to_pdf(doc_path, pdf_path):
@@ -76,10 +66,21 @@ def tag_pdf_with_links(pdf_path, tag_link_df):
     return tagged_pdf_path
 
 # Main processing
-if selected_folder and tag_link_df is not None:
-    doc_files = list(Path(selected_folder).rglob("*.doc")) + list(Path(selected_folder).rglob("*.docx"))
-    for doc_file in doc_files:
-        pdf_file = str(doc_file.with_suffix(".pdf"))
-        convert_doc_to_pdf(str(doc_file), pdf_file)
+if uploaded_docs and tag_link_df is not None:
+    for uploaded_doc in uploaded_docs:
+        suffix = Path(uploaded_doc.name).suffix
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_doc:
+            tmp_doc.write(uploaded_doc.read())
+            tmp_doc_path = tmp_doc.name
+
+        pdf_file = tmp_doc_path.replace(suffix, ".pdf")
+        convert_doc_to_pdf(tmp_doc_path, pdf_file)
         tagged_pdf = tag_pdf_with_links(pdf_file, tag_link_df)
-        st.write(f"Processed: {doc_file.name} → [Download tagged PDF]({tagged_pdf})")
+
+        with open(tagged_pdf, "rb") as f:
+            st.download_button(
+                label=f"Download Tagged PDF for {uploaded_doc.name}",
+                data=f,
+                file_name=Path(tagged_pdf).name,
+                mime="application/pdf"
+            )
