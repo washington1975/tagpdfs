@@ -7,10 +7,10 @@ from pathlib import Path
 import tempfile
 import zipfile
 
-st.title("PDF Tagger + Inspection Extractor")
+st.title("Tag and Link Existing PDFs")
 
-# Upload CSV with 'tag' and 'link'
-csv_file = st.file_uploader("Upload CSV with 'tag' and 'link' columns", type=["csv"])
+# Load CSV containing 'tag' and 'link'
+csv_file = st.file_uploader("Upload CSV file with 'tag' and 'link' columns", type=["csv"])
 
 tag_link_df = None
 if csv_file:
@@ -20,18 +20,18 @@ if csv_file:
             st.error("CSV must contain 'tag' and 'link' columns.")
             tag_link_df = None
     except Exception as e:
-        st.error(f"Error reading CSV: {e}")
+        st.error(f"Failed to read CSV: {e}")
 
 # Upload PDF files
-uploaded_pdfs = st.file_uploader("Upload PDF files to process", type=["pdf"], accept_multiple_files=True)
+uploaded_pdfs = st.file_uploader("Upload PDFs to tag", type=["pdf"], accept_multiple_files=True)
 
-# --- Tagging function ---
+# Function to tag PDFs with links based on tags
 def tag_pdf_with_links(pdf_path, tag_link_df):
     doc = fitz.open(pdf_path)
     for page in doc:
         text = page.get_text("text")
         for _, row in tag_link_df.iterrows():
-            pattern = r'(?<!\w){}(?!\w)'.format(re.escape(row['tag']))
+            pattern = r'(?<!\\w){}(?!\\w)'.format(re.escape(row['tag']))
             for match in re.finditer(pattern, text):
                 xrefs = page.search_for(row['tag'])
                 for inst in xrefs:
@@ -45,30 +45,7 @@ def tag_pdf_with_links(pdf_path, tag_link_df):
     doc.close()
     return tagged_pdf_path
 
-# --- Inspection notes extraction ---
-def extract_inspection_notes(pdf_path, tags):
-    doc = fitz.open(pdf_path)
-    notes = []
-
-    for page in doc:
-        blocks = page.get_text("blocks")
-        for block in blocks:
-            content = block[4]
-            lines = content.splitlines()
-            for line in lines:
-                for tag in tags:
-                    if line.startswith(tag):
-                        parts = re.split(r'\s{2,}|\t', line)
-                        if len(parts) >= 3:
-                            notes.append({
-                                "Feature": parts[0].strip(),
-                                "Last Inspection": parts[1].strip(),
-                                "This Inspection": parts[2].strip()
-                            })
-    doc.close()
-    return notes
-
-# Main logic
+# Main processing
 zip_buffer = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
 all_tagged_paths = []
 
@@ -82,36 +59,21 @@ if uploaded_pdfs and tag_link_df is not None:
         all_tagged_paths.append((tagged_pdf, uploaded_pdf.name.replace(".pdf", "_tagged.pdf")))
 
         with open(tagged_pdf, "rb") as f:
-            st.download_butto(
-                label=f"Download Tagged PDF: {uploaded_pdf.name}",
+            st.download_button(
+                label=f"Download Tagged PDF for {uploaded_pdf.name}",
                 data=f,
                 file_name=Path(tagged_pdf).name,
                 mime="application/pdf"
             )
 
-        # Extract Inspection Notes
-        notes = extract_inspection_notes(tagged_pdf, tag_link_df['tag'].tolist())
-        if notes:
-            df_notes = pd.DataFrame(notes)
-            st.write(f"### Inspection Notes: {uploaded_pdf.name}")
-            st.dataframe(df_notes)
-
-            csv_data = df_notes.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label=f"Download Notes CSV: {uploaded_pdf.name}",
-                data=csv_data,
-                file_name=uploaded_pdf.name.replace(".pdf", "_inspection_notes.csv"),
-                mime="text/csv"
-            )
-
-    # Bundle all tagged PDFs into a ZIP
+    # Create a ZIP file
     with zipfile.ZipFile(zip_buffer.name, 'w') as zipf:
         for tagged_path, arcname in all_tagged_paths:
             zipf.write(tagged_path, arcname=arcname)
 
     with open(zip_buffer.name, "rb") as f:
         st.download_button(
-            label="📦 Download All Tagged PDFs as ZIP",
+            label="Download All Tagged PDFs as ZIP",
             data=f,
             file_name="tagged_pdfs.zip",
             mime="application/zip"
