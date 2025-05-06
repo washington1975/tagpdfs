@@ -2,13 +2,13 @@ import streamlit as st
 import os
 import re
 import fitz  # PyMuPDF
-import pymupdf
 import pandas as pd
 from pathlib import Path
 import tempfile
 import zipfile
+from datetime import datetime
 
-st.title("PDF Tagger + Inspection Extractor")
+st.title("📄 PDF Tagger + Inspection Extractor")
 
 # Upload CSV with 'tag' and 'link'
 csv_file = st.file_uploader("Upload CSV with 'tag' and 'link' columns", type=["csv"])
@@ -46,8 +46,8 @@ def tag_pdf_with_links(pdf_path, tag_link_df):
     doc.close()
     return tagged_pdf_path
 
-# --- Inspection notes extraction ---
-def extract_inspection_notes(pdf_path, tags):
+# --- Extract Inspection Notes ---
+def extract_inspection_notes(pdf_path, tags, file_date):
     doc = fitz.open(pdf_path)
     notes = []
 
@@ -64,14 +64,26 @@ def extract_inspection_notes(pdf_path, tags):
                             notes.append({
                                 "Feature": parts[0].strip(),
                                 "Last Inspection": parts[1].strip(),
-                                "This Inspection": parts[2].strip()
+                                "This Inspection": parts[2].strip(),
+                                "Date": file_date
                             })
     doc.close()
     return notes
 
+# --- Extract date from filename ---
+def extract_date_from_filename(filename):
+    match = re.search(r'\d{8}', filename)
+    if match:
+        try:
+            return datetime.strptime(match.group(), "%Y%m%d").date()
+        except:
+            return ""
+    return ""
+
 # Main logic
 zip_buffer = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
 all_tagged_paths = []
+all_csv_paths = []
 
 if uploaded_pdfs and tag_link_df is not None:
     for uploaded_pdf in uploaded_pdfs:
@@ -79,41 +91,51 @@ if uploaded_pdfs and tag_link_df is not None:
             tmp_pdf.write(uploaded_pdf.read())
             tmp_pdf_path = tmp_pdf.name
 
+        file_date = extract_date_from_filename(uploaded_pdf.name)
+
         tagged_pdf = tag_pdf_with_links(tmp_pdf_path, tag_link_df)
-        all_tagged_paths.append((tagged_pdf, uploaded_pdf.name.replace(".pdf", "_tagged.pdf")))
+        tagged_pdf_name = uploaded_pdf.name.replace(".pdf", "_tagged.pdf")
+        all_tagged_paths.append((tagged_pdf, tagged_pdf_name))
 
         with open(tagged_pdf, "rb") as f:
             st.download_button(
-                label=f"Download Tagged PDF: {uploaded_pdf.name}",
+                label=f"📥 Download Tagged PDF: {uploaded_pdf.name}",
                 data=f,
-                file_name=Path(tagged_pdf).name,
+                file_name=tagged_pdf_name,
                 mime="application/pdf"
             )
 
-        # Extract Inspection Notes
-        notes = extract_inspection_notes(tagged_pdf, tag_link_df['tag'].tolist())
+        # Extract notes
+        notes = extract_inspection_notes(tagged_pdf, tag_link_df['tag'].tolist(), file_date)
         if notes:
             df_notes = pd.DataFrame(notes)
-            st.write(f"### Inspection Notes: {uploaded_pdf.name}")
+            st.write(f"### 📝 Inspection Notes: {uploaded_pdf.name}")
             st.dataframe(df_notes)
 
-            csv_data = df_notes.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label=f"Download Notes CSV: {uploaded_pdf.name}",
-                data=csv_data,
-                file_name=uploaded_pdf.name.replace(".pdf", "_inspection_notes.csv"),
-                mime="text/csv"
-            )
+            csv_filename = uploaded_pdf.name.replace(".pdf", "_inspection_notes.csv")
+            csv_path = os.path.join(tempfile.gettempdir(), csv_filename)
+            df_notes.to_csv(csv_path, index=False)
+            all_csv_paths.append((csv_path, csv_filename))
 
-    # Bundle all tagged PDFs into a ZIP
+            with open(csv_path, "rb") as csvfile:
+                st.download_button(
+                    label=f"📥 Download Notes CSV: {uploaded_pdf.name}",
+                    data=csvfile,
+                    file_name=csv_filename,
+                    mime="text/csv"
+                )
+
+    # --- Bundle tagged PDFs + CSVs into a ZIP ---
     with zipfile.ZipFile(zip_buffer.name, 'w') as zipf:
         for tagged_path, arcname in all_tagged_paths:
             zipf.write(tagged_path, arcname=arcname)
+        for csv_path, csvname in all_csv_paths:
+            zipf.write(csv_path, arcname=csvname)
 
     with open(zip_buffer.name, "rb") as f:
         st.download_button(
-            label="📦 Download All Tagged PDFs as ZIP",
+            label="📦 Download All Tagged PDFs + CSVs as ZIP",
             data=f,
-            file_name="tagged_pdfs.zip",
+            file_name="all_tagged_output.zip",
             mime="application/zip"
         )
