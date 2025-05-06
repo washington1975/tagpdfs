@@ -1,0 +1,6 @@
+fitz
+pandas
+pymupdf
+comtypes
+frontend
+python-docx
