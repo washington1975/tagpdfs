@@ -83,7 +83,7 @@ if uploaded_pdfs and tag_link_df is not None:
         all_tagged_paths.append((tagged_pdf, uploaded_pdf.name.replace(".pdf", "_tagged.pdf")))
 
         with open(tagged_pdf, "rb") as f:
-            st.download_butto(
+            st.download_button(
                 label=f"Download Tagged PDF: {uploaded_pdf.name}",
                 data=f,
                 file_name=Path(tagged_pdf).name,
