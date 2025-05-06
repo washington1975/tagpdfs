@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import zipfile
 
-st.title("Tag and Link Existing PDFs")
+st.title("Tag and Link Existing PDFs with Inspection Summary")
 
 # Load CSV containing 'tag' and 'link'
 csv_file = st.file_uploader("Upload CSV file with 'tag' and 'link' columns", type=["csv"])
