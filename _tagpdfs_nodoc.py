@@ -4,9 +4,11 @@ import re
 import fitz  # PyMuPDF
 import pandas as pd
 from pathlib import Path
+import subprocess
+import platform
 import tempfile
 
-st.title("Tag and Link Existing PDFs")
+st.title("Tag and Link PDFs from Word Docs")
 
 # Load CSV containing 'tag' and 'link'
 csv_file = st.file_uploader("Upload CSV file with 'tag' and 'link' columns", type=["csv"])
@@ -21,8 +23,27 @@ if csv_file:
     except Exception as e:
         st.error(f"Failed to read CSV: {e}")
 
-# Upload PDF files
-uploaded_pdfs = st.file_uploader("Upload PDFs to tag", type=["pdf"], accept_multiple_files=True)
+# Upload Word DOC/DOCX files
+uploaded_docs = st.file_uploader("Upload DOC/DOCX files", type=["doc", "docx"], accept_multiple_files=True)
+
+# Function to convert DOC/DOCX to PDF using appropriate method per OS
+def convert_doc_to_pdf(doc_path, pdf_path):
+    current_os = platform.system()
+    if current_os == "Windows":
+        import comtypes.client
+        word = comtypes.client.CreateObject('Word.Application')
+        doc = word.Documents.Open(doc_path)
+        doc.SaveAs(pdf_path, FileFormat=17)  # 17 = wdFormatPDF
+        doc.Close()
+        word.Quit()
+    else:
+        subprocess.run([
+            "libreoffice",
+            "--headless",
+            "--convert-to", "pdf",
+            "--outdir", str(Path(pdf_path).parent),
+            str(doc_path)
+        ], check=True)
 
 # Function to tag PDFs with links based on tags
 def tag_pdf_with_links(pdf_path, tag_link_df):
@@ -45,17 +66,20 @@ def tag_pdf_with_links(pdf_path, tag_link_df):
     return tagged_pdf_path
 
 # Main processing
-if uploaded_pdfs and tag_link_df is not None:
-    for uploaded_pdf in uploaded_pdfs:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
-            tmp_pdf.write(uploaded_pdf.read())
-            tmp_pdf_path = tmp_pdf.name
+if uploaded_docs and tag_link_df is not None:
+    for uploaded_doc in uploaded_docs:
+        suffix = Path(uploaded_doc.name).suffix
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_doc:
+            tmp_doc.write(uploaded_doc.read())
+            tmp_doc_path = tmp_doc.name
 
-        tagged_pdf = tag_pdf_with_links(tmp_pdf_path, tag_link_df)
+        pdf_file = tmp_doc_path.replace(suffix, ".pdf")
+        convert_doc_to_pdf(tmp_doc_path, pdf_file)
+        tagged_pdf = tag_pdf_with_links(pdf_file, tag_link_df)
 
         with open(tagged_pdf, "rb") as f:
             st.download_button(
-                label=f"Download Tagged PDF for {uploaded_pdf.name}",
+                label=f"Download Tagged PDF for {uploaded_doc.name}",
                 data=f,
                 file_name=Path(tagged_pdf).name,
                 mime="application/pdf"
