@@ -5,6 +5,7 @@ import fitz  # PyMuPDF
 import pandas as pd
 from pathlib import Path
 import tempfile
+import zipfile
 
 st.title("Tag and Link Existing PDFs")
 
@@ -45,6 +46,9 @@ def tag_pdf_with_links(pdf_path, tag_link_df):
     return tagged_pdf_path
 
 # Main processing
+zip_buffer = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+all_tagged_paths = []
+
 if uploaded_pdfs and tag_link_df is not None:
     for uploaded_pdf in uploaded_pdfs:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
@@ -52,6 +56,7 @@ if uploaded_pdfs and tag_link_df is not None:
             tmp_pdf_path = tmp_pdf.name
 
         tagged_pdf = tag_pdf_with_links(tmp_pdf_path, tag_link_df)
+        all_tagged_paths.append((tagged_pdf, uploaded_pdf.name.replace(".pdf", "_tagged.pdf")))
 
         with open(tagged_pdf, "rb") as f:
             st.download_button(
@@ -60,3 +65,16 @@ if uploaded_pdfs and tag_link_df is not None:
                 file_name=Path(tagged_pdf).name,
                 mime="application/pdf"
             )
+
+    # Create a ZIP file
+    with zipfile.ZipFile(zip_buffer.name, 'w') as zipf:
+        for tagged_path, arcname in all_tagged_paths:
+            zipf.write(tagged_path, arcname=arcname)
+
+    with open(zip_buffer.name, "rb") as f:
+        st.download_button(
+            label="Download All Tagged PDFs as ZIP",
+            data=f,
+            file_name="tagged_pdfs.zip",
+            mime="application/zip"
+        )
