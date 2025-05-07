@@ -90,34 +90,25 @@ def extract_inspection_notes(pdf_path, tags, file_date):
 
     return notes
 
-def extract_tables_and_findings(pdf_path, file_date):
-    st.markdown(f"📊 **Extracting tables and findings from:** `{Path(pdf_path).name}`")
-    combined_data = []
+def extract_tables_from_pdf(pdf_path):
+    st.markdown(f"📊 **Extracting tables from:** `{Path(pdf_path).name}`")
+    all_tables = []
     try:
         with pdfplumber.open(pdf_path) as pdf:
             for i, page in enumerate(pdf.pages):
-                # Extract Table Data
                 tables = page.extract_tables()
                 if tables:
-                    for table in tables:
-                        # Assuming the first table is the "Inspection Site Summary"
-                        if i == 0:  # Check if it's the first page
-                            df = pd.DataFrame(table[1:], columns=table[0]) if table else pd.DataFrame()
-                            if not df.empty and "Feature" in df.columns and "Last Inspection" in df.columns and "This Inspection" in df.columns:
-                                df["Date"] = file_date
-                                combined_data.extend(df[["Feature", "Last Inspection", "This Inspection", "Date"]].to_dict('records'))
-
-                # Extract Inspection Findings
-                text = page.extract_text()
-                if text:
-                    findings_match = re.search(r"3\. Inspection Findings\s*(.*?)(?=\n\w+\s*:|\n\d+\.|\Z)", text, re.DOTALL | re.IGNORECASE)
-                    if findings_match:
-                        findings_text = findings_match.group(1).strip()
-                        combined_data.append({"Inspection Finding": findings_text, "Date": file_date})
-
+                    st.info(f"✅ Found {len(tables)} table(s) on page {i+1}.")
+                    for j, table in enumerate(tables):
+                        df = pd.DataFrame(table[1:], columns=table[0]) if table else pd.DataFrame()
+                        if not df.empty:
+                            all_tables.append(df)
+                            st.dataframe(df) # Display each table in Streamlit
+                else:
+                    st.info(f"⚠️ No tables found on page {i+1}.")
     except Exception as e:
-        st.error(f"❌ Error while extracting tables/findings from `{Path(pdf_path).name}`: {e}")
-    return combined_data
+        st.error(f"❌ Error while extracting tables from `{Path(pdf_path).name}`: {e}")
+    return all_tables
 
 def extract_date_from_filename(filename):
     match = re.search(r'\d{8}', filename)
@@ -132,7 +123,8 @@ def extract_date_from_filename(filename):
 zip_buffer = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
 all_tagged_paths = []
 all_csv_paths = []
-all_combined_data = []
+all_combined_notes = []
+all_extracted_tables = {} # Dictionary to store DataFrames per file
 
 if uploaded_pdfs and tag_link_df is not None:
     for uploaded_pdf in uploaded_pdfs:
@@ -147,10 +139,41 @@ if uploaded_pdfs and tag_link_df is not None:
         tagged_pdf_name = uploaded_pdf.name.replace(".pdf", "_tagged.pdf")
         all_tagged_paths.append((tagged_pdf, tagged_pdf_name))
 
-        # Extract Tables and Findings
-        extracted_data = extract_tables_and_findings(tagged_pdf, file_date)
-        if extracted_data:
-            all_combined_data.extend(extracted_data)
+        # Notes Extraction
+        notes = extract_inspection_notes(tagged_pdf, tag_link_df['tag'].tolist(), file_date)
+        if notes:
+            df_notes = pd.DataFrame(notes)
+            all_combined_notes.append(df_notes)
+
+            csv_filename = uploaded_pdf.name.replace(".pdf", "_inspection_notes.csv")
+            csv_path = os.path.join(tempfile.gettempdir(), csv_filename)
+            df_notes.to_csv(csv_path, index=False)
+            all_csv_paths.append((csv_path, csv_filename))
+
+            with open(csv_path, "rb") as csvfile:
+                st.download_button(
+                    label=f"📥 Download Notes CSV: {uploaded_pdf.name}",
+                    data=csvfile,
+                    file_name=csv_filename,
+                    mime="text/csv"
+                )
+
+        # Table Extraction
+        extracted_tables = extract_tables_from_pdf(tagged_pdf)
+        if extracted_tables:
+            all_extracted_tables[uploaded_pdf.name] = extracted_tables
+            for i, df_table in enumerate(extracted_tables):
+                table_csv_filename = uploaded_pdf.name.replace(".pdf", f"_table_{i+1}.csv")
+                table_csv_path = os.path.join(tempfile.gettempdir(), table_csv_filename)
+                df_table.to_csv(table_csv_path, index=False)
+                all_csv_paths.append((table_csv_path, table_csv_filename))
+                with open(table_csv_path, "rb") as table_csv_file:
+                    st.download_button(
+                        label=f"📥 Download Table {i+1} CSV: {uploaded_pdf.name}",
+                        data=table_csv_file,
+                        file_name=table_csv_filename,
+                        mime="text/csv"
+                    )
 
         with open(tagged_pdf, "rb") as f:
             st.download_button(
@@ -160,16 +183,16 @@ if uploaded_pdfs and tag_link_df is not None:
                 mime="application/pdf"
             )
 
-    # --- Show Combined Data Summary ---
-    if all_combined_data:
-        combined_df = pd.DataFrame(all_combined_data)
-        st.markdown("## 🔍 Combined Inspection Data")
+    # --- Show Combined Notes Summary ---
+    if all_combined_notes:
+        combined_df = pd.concat(all_combined_notes, ignore_index=True)
+        st.markdown("## 🔍 Combined Inspection Summary")
         st.dataframe(combined_df)
 
         # Save combined CSV
-        combined_csv_path = os.path.join(tempfile.gettempdir(), "all_inspection_data_combined.csv")
+        combined_csv_path = os.path.join(tempfile.gettempdir(), "all_inspection_notes_combined.csv")
         combined_df.to_csv(combined_csv_path, index=False)
-        all_csv_paths.append((combined_csv_path, "all_inspection_data_combined.csv"))
+        all_csv_paths.append((combined_csv_path, "all_inspection_notes_combined.csv"))
 
     # --- Final ZIP ---
     with zipfile.ZipFile(zip_buffer.name, 'w') as zipf:
