@@ -7,9 +7,8 @@ from pathlib import Path
 import tempfile
 import zipfile
 from datetime import datetime
-import pdfplumber  # Import the table extraction library
 
-st.title("📄 PDF Tagger + Inspection Notes & Tables Extractor 3")
+st.title("📄 PDF Tagger + Inspection Notes Extractor 2")
 
 # --- Upload CSV ---
 csv_file = st.file_uploader("Upload CSV with 'tag' and 'link' columns", type=["csv"])
@@ -58,7 +57,7 @@ def extract_inspection_notes(pdf_path, tags, file_date):
             blocks = page.get_text("blocks")
             for block in blocks:
                 content = block[4]
-                # st.warning(content)  # Debugging line
+                st.warning(content)  # Show block content for debugging
 
                 for line in content.splitlines():
                     for tag in tags:
@@ -90,25 +89,7 @@ def extract_inspection_notes(pdf_path, tags, file_date):
 
     return notes
 
-def extract_tables_from_pdf(pdf_path):
-    st.markdown(f"📊 **Extracting tables from:** `{Path(pdf_path).name}`")
-    all_tables = []
-    try:
-        with pdfplumber.open(pdf_path) as pdf:
-            for i, page in enumerate(pdf.pages):
-                tables = page.extract_tables()
-                if tables:
-                    st.info(f"✅ Found {len(tables)} table(s) on page {i+1}.")
-                    for j, table in enumerate(tables):
-                        df = pd.DataFrame(table[1:], columns=table[0]) if table else pd.DataFrame()
-                        if not df.empty:
-                            all_tables.append(df)
-                            st.dataframe(df) # Display each table in Streamlit
-                else:
-                    st.info(f"⚠️ No tables found on page {i+1}.")
-    except Exception as e:
-        st.error(f"❌ Error while extracting tables from `{Path(pdf_path).name}`: {e}")
-    return all_tables
+
 
 def extract_date_from_filename(filename):
     match = re.search(r'\d{8}', filename)
@@ -124,7 +105,6 @@ zip_buffer = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
 all_tagged_paths = []
 all_csv_paths = []
 all_combined_notes = []
-all_extracted_tables = {} # Dictionary to store DataFrames per file
 
 if uploaded_pdfs and tag_link_df is not None:
     for uploaded_pdf in uploaded_pdfs:
@@ -150,6 +130,14 @@ if uploaded_pdfs and tag_link_df is not None:
             df_notes.to_csv(csv_path, index=False)
             all_csv_paths.append((csv_path, csv_filename))
 
+            with open(tagged_pdf, "rb") as f:
+                st.download_button(
+                    label=f"📥 Download Tagged PDF: {uploaded_pdf.name}",
+                    data=f,
+                    file_name=tagged_pdf_name,
+                    mime="application/pdf"
+                )
+
             with open(csv_path, "rb") as csvfile:
                 st.download_button(
                     label=f"📥 Download Notes CSV: {uploaded_pdf.name}",
@@ -157,31 +145,6 @@ if uploaded_pdfs and tag_link_df is not None:
                     file_name=csv_filename,
                     mime="text/csv"
                 )
-
-        # Table Extraction
-        extracted_tables = extract_tables_from_pdf(tagged_pdf)
-        if extracted_tables:
-            all_extracted_tables[uploaded_pdf.name] = extracted_tables
-            for i, df_table in enumerate(extracted_tables):
-                table_csv_filename = uploaded_pdf.name.replace(".pdf", f"_table_{i+1}.csv")
-                table_csv_path = os.path.join(tempfile.gettempdir(), table_csv_filename)
-                df_table.to_csv(table_csv_path, index=False)
-                all_csv_paths.append((table_csv_path, table_csv_filename))
-                with open(table_csv_path, "rb") as table_csv_file:
-                    st.download_button(
-                        label=f"📥 Download Table {i+1} CSV: {uploaded_pdf.name}",
-                        data=table_csv_file,
-                        file_name=table_csv_filename,
-                        mime="text/csv"
-                    )
-
-        with open(tagged_pdf, "rb") as f:
-            st.download_button(
-                label=f"📥 Download Tagged PDF: {uploaded_pdf.name}",
-                data=f,
-                file_name=tagged_pdf_name,
-                mime="application/pdf"
-            )
 
     # --- Show Combined Notes Summary ---
     if all_combined_notes:
