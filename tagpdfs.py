@@ -9,7 +9,7 @@ import zipfile
 from datetime import datetime
 import pdfplumber  # Import the table extraction library
 
-st.title("📄 PDF Tagger + Inspection Data Extractor 4")
+st.title("📄 PDF Tagger + Inspection Data Extractor 5")
 
 # --- Upload CSV ---
 csv_file = st.file_uploader("Upload CSV with 'tag' and 'link' columns", type=["csv"])
@@ -52,7 +52,7 @@ def extract_feature_information(pdf_path, feature_tag):
             for page_num, page in enumerate(pdf.pages, start=1):
                 text = page.extract_text()
                 if text:
-                    findings_match = re.search(r"3\. Inspection Findings\s*(.*?)(?=\n\w+\s*:|\n\d+\.|\Z)", text, re.DOTALL | re.IGNORECASE)
+                    findings_match = re.search(r"\. Inspection Findings\s*(.*?)(?=\n\w+\s*:|\n\d+\.|\Z)", text, re.DOTALL | re.IGNORECASE)
                     if findings_match:
                         findings_text = findings_match.group(1).strip()
                         # Look for the feature tag within the findings text
