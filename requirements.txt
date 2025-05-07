@@ -4,3 +4,4 @@ pymupdf
 comtypes
 frontend
 # python-docx Using in converting DOC to PDF.
+pdfplumber
